@@ -2,13 +2,15 @@
 
 function usage() {
 	echo
-	echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
-	echo "@@//////@@///////@@////@@@@@@@@@@@//@@//@@@@@@@@@@//@@////@@@"
-	echo "@@//@@@@@@@@//@@@@@//@//@@@@@@@@@////@@//@@@@@@@@//@@//@@@/@@"
-	echo "@@////@@@@@@//@@@@@////@@@///@@@//@@//@@//@@//@@//@@@@@//@@@@"
-	echo "@@//@@@@@@@@//@@@@@//@@@@@@@@@@////////@@////////@@@@/@@@//@@"
-	echo "@@//@@@@@@@@//@@@@@//@@@@@@@@@//@@@@@@//@@//@@//@@@@@@////@@@"
-	echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
+	echo "THESE NEED TO BE UPDATED BASED ON RESULTING CODE"
+	echo
+	echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
+	echo "@@    @@@     @@@@    @@@     @@@  @@  @@"
+	echo "@@  @  @@  @@  @@  @@@ @@  @@  @@  @@  @@"
+	echo "@@    @@@  @@  @@@@  @@@@     @@@  @@  @@"
+	echo "@@  @ @@@  @@  @@ @@@  @@  @@  @@  @@  @@"
+	echo "@@  @@ @@     @@@@    @@@     @@@@    @@@"
+	echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
 	echo
 	echo "   Parameters:"
 	echo
@@ -29,19 +31,19 @@ function usage() {
 	echo "   Examples:"
 	echo 
 	echo "	To view a list of all Production instances IDs:"
-	echo "		ftpaws.sh -t Production -l"
+	echo "		rdsbu -t Production -l"
 	echo 
 	echo "	To FTP a file to the Cron instances:"
-	echo "		ftpaws.sh -f /path/to/local/file -d /path/to/destination/directory"
+	echo "		rdsbu -f /path/to/local/file -d /path/to/destination/directory"
 	echo
 }
 
-function ftpaws() {
+function rdsbu() {
 	if [[ $# == "0" ]]; then
-		# listdomains "-l"
+		# listsnapshots "-l"
 		echo 
 		echo "Nothing to do"
-		echo "Type 'ftpaws.sh -h' for help"
+		echo "Type 'rdsbu -h' for help"
 		echo 
 	else
 		echo
@@ -58,7 +60,7 @@ function switchboard() {
 				exit
 				;;
 			"t")
-				settag $OPTARG
+				setid $OPTARG
 				;;
 			"l" | "s" | "a")
 				if [[ -z $listparam ]]; then
@@ -100,7 +102,7 @@ function switchboard() {
 		usage
 		exit 1
 	elif [[ $listparam ]]; then
-		listdomains
+		listsnapshots
 	elif [[ $filepath ]] || [[ $destination ]]; then
 		sendftp
 	else 
@@ -109,39 +111,25 @@ function switchboard() {
 	fi
 }
 
-function settag() {
+function setid() {
 	tag=$1
-	echo "Search tag set to '$tag'"
+	echo "Backup id set to '$tag'"
 }
 
-function listdomains() {
-	echo "Getting instance details..."
-	data=$(ec2-describe-instances)
-	tags=$(echo "$data" | grep TAG)
-	instances=$(echo "$data" | grep INSTANCE)
+function listsnapshots() {
+	echo "Getting snapshot details..."
+	# data=$(rds-describe-db-snapshots)
+	data=$(cat rds-describe-db-snapshots.test.txt) # TEST DATA - CHANGE BEFORE PUBLISHING
+
+	# tags=$(echo "$data" | grep TAG)
+	snapshots=$(echo "$data" | grep DBSNAPSHOT)
 	ids=(); ## declare array
-	domains=(); ## declare array
-	while read line; ## gets each instance matching the tag
-	do
-		set $line ## $5 = instance tag, $3 = instance id
-		if [ -z "$tag" ]; then
-			ids+=(${3})
-		else
-			if [[ $5 == $tag ]]; then
-				ids+=(${3})
-			fi
-		fi
-	done <<< "$tags"
 	while read line; ## gets each instance domain name
 	do
 		set $line ## $2 = instance tag, $4 = domain name
-		for x in "${ids[@]}"
-		do
-			if [[ $2 == "$x" ]]; then
-				domains+=(${4})
-			fi
-		done
-	done <<< "$instances"
+		echo ${2}
+		ids+=(${2})
+	done <<< "$snapshots"
 	if [[ $listparam == "s" ]]; then
 		listfunctions $param
 	elif [[ $listparam == "l" ]]; then
@@ -176,24 +164,4 @@ function listfunctions() {
 	echo 
 }
 
-function sendftp() {
-	if [[ ${#domains[@]} == 0 ]]; then
-		listdomains
-	fi
-	if [[ -z $filepath ]] || [[ -z $destination ]]; then
-		echo "Both the source file path and destination need to be set"
-		echo "Type 'ftpaws.sh -h' for help"
-		exit 1
-	fi
-	echo "filepath=$filepath"
-	echo "destination=$destination"
-	echo "${domains[@]}"
-	echo 
-	echo "Connecting to server..."
-	sftp -n -v $HOST << EOT
-	ls
-	quit
-	EOT
-}
-
-ftpaws $@
+rdsbu $@
