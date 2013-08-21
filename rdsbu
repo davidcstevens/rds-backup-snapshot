@@ -52,7 +52,7 @@ function rdsbu() {
 }
 
 function switchboard() {
-	while getopts ":ht:slaf:" optname
+	while getopts ":ht:l:b" optname
 	do
 		case "$optname" in
 			"h")
@@ -67,11 +67,9 @@ function switchboard() {
 					listparam=$optname
 				fi
 				;;
-			"f")
-				filepath=$OPTARG
-				;;
-			"d")
-				destination=$OPTARG
+			"b")
+				backuplatest
+				exit
 				;;
 			"?")
 				echo "Unknown option $OPTARG"
@@ -111,51 +109,62 @@ function switchboard() {
 	fi
 }
 
-function setid() {
-	tag=$1
-	echo "Backup id set to '$tag'"
+function backuplatest() {
+	echo "Backing up latest snapshot..."
+	setdefaults
+	setdata
+
+	snapshots=$(echo "$data" | grep DBSNAPSHOT)
+	while read line; ## gets each instance domain name
+	do
+		set $line ## $2 = instance tag, $4 = domain name
+		dt=${3:0:10}
+		pdt=$(date -d "$dt" "+%s")
+		ssavedt=$(date --date @$savedt +%F)
+		# echo "$dt > $ssavedt"
+		if [[ $pdt > $savedt ]]; then
+			# echo "saved $dt"
+			if [[ $4 == 'production' ]]; then
+				savedt=$pdt
+				snapshot=$2
+			fi
+		fi
+	done <<< "$snapshots"
+	echo "latest snapshot ID: $snapshot"
+	echo
 }
 
 function listsnapshots() {
 	echo "Getting snapshot details..."
-	# data=$(rds-describe-db-snapshots)
-	data=$(cat rds-describe-db-snapshots.test.txt) # TEST DATA - CHANGE BEFORE PUBLISHING
-
-	# tags=$(echo "$data" | grep TAG)
+	snapshot="" ## set defaults
+	setdata
 	snapshots=$(echo "$data" | grep DBSNAPSHOT)
-	ids=(); ## declare array
-	while read line; ## gets each instance domain name
-	do
-		set $line ## $2 = instance tag, $4 = domain name
-		echo ${2}
-		ids+=(${2})
-	done <<< "$snapshots"
-	if [[ $listparam == "s" ]]; then
-		listfunctions $param
-	elif [[ $listparam == "l" ]]; then
-		listfunctions $param
-	elif [[ $listparam == "a" ]]; then
+	if [[ $listparam == "l" ]]; then
 		listfunctions $param
 	fi
 	echo
 }
 
+function setdefaults() {
+	echo "Setting defaults..."
+	snapshot="" ## set defaults
+	savedt=$(date -d "2009-01-01" "+%s") ## set defaults
+}
+
+function setdata() {
+	echo "Setting data..."
+	# data=$(rds-describe-db-snapshots)
+	data=$(cat rds-describe-db-snapshots.test.txt) # TEST DATA - CHANGE TO PREVIOUS LINE BEFORE PUBLISHING
+}
+
 function listfunctions() {
 	case "$listparam" in
 		"l")
-			for x in "${domains[@]}"
+			while read line; ## gets each instance domain name
 			do
-				echo $x
-			done
-			;;
-		"s")
-			echo ${domains[@]}
-			;;
-		"a")
-			for x in "${instances[@]}"
-			do
-				echo "$x"
-			done
+				set $line ## $2 = instance tag, $4 = domain name
+				echo $line
+			done <<< "$snapshots"
 			;;
 		*)
 			echo
