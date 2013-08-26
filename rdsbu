@@ -52,7 +52,7 @@ function rdsbu() {
 }
 
 function switchboard() {
-	while getopts ":ht:l:b" optname
+	while getopts ":ht:lb" optname
 	do
 		case "$optname" in
 			"h")
@@ -110,11 +110,10 @@ function switchboard() {
 }
 
 function backuplatest() {
-	echo "Backing up latest snapshot..."
 	setdefaults
 	setdata
+	echo "Backing up latest snapshot..."
 
-	snapshots=$(echo "$data" | grep DBSNAPSHOT)
 	while read line; ## gets each instance domain name
 	do
 		set $line ## $2 = instance tag, $4 = domain name
@@ -130,15 +129,17 @@ function backuplatest() {
 			fi
 		fi
 	done <<< "$snapshots"
-	echo "latest snapshot ID: $snapshot"
+	echo "Spinning up snapshot ID: $snapshot"
+	rds-restore-db-instance-from-db-snapshot $backupnm -s $snapshot -c db.m1.large
 	echo
 }
 
 function listsnapshots() {
-	echo "Getting snapshot details..."
-	snapshot="" ## set defaults
+	setdefaults
 	setdata
-	snapshots=$(echo "$data" | grep DBSNAPSHOT)
+	echo "Getting snapshot details..."
+	echo
+	
 	if [[ $listparam == "l" ]]; then
 		listfunctions $param
 	fi
@@ -146,15 +147,25 @@ function listsnapshots() {
 }
 
 function setdefaults() {
-	echo "Setting defaults..."
-	snapshot="" ## set defaults
-	savedt=$(date -d "2009-01-01" "+%s") ## set defaults
+	echo -n "Setting defaults..."
+	snapshot=""
+	savedt=$(date -d "2009-01-01" "+%s")
+	backupnm="backup"
+	echo -e "\rDefaults set\033[K"
 }
 
 function setdata() {
-	echo "Setting data..."
-	# data=$(rds-describe-db-snapshots)
-	data=$(cat rds-describe-db-snapshots.test.txt) # TEST DATA - CHANGE TO PREVIOUS LINE BEFORE PUBLISHING
+	echo -n "Setting data..."
+
+	sdata=$(rds-describe-db-snapshots)
+	# sdata=$(cat rds-describe-db-snapshots.txt) # TEST DATA - CHANGE TO PREVIOUS LINE BEFORE PUBLISHING
+	snapshots=$(echo "$sdata" | grep DBSNAPSHOT)
+
+	idata=$(rds-describe-db-instances)
+	# idata=$(cat rds-describe-db-instances.txt) # TEST DATA - CHANGE TO PREVIOUS LINE BEFORE PUBLISHING
+	instances=$(echo "$idata" | grep DBINSTANCE)
+
+	echo -e "\rData set\033[K"
 }
 
 function listfunctions() {
