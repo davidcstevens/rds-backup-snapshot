@@ -182,6 +182,7 @@ function listfunctions() {
 			;;
 	esac
 	echo 
+	## note
 }
 
 rdsbu $@
