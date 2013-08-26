@@ -1,0 +1,187 @@
+#!/bin/bash
+
+function usage() {
+	echo
+	echo "THESE NEED TO BE UPDATED BASED ON RESULTING CODE"
+	echo
+	echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
+	echo "@@    @@@     @@@@    @@@     @@@  @@  @@"
+	echo "@@  @  @@  @@  @@  @@@ @@  @@  @@  @@  @@"
+	echo "@@    @@@  @@  @@@@  @@@@     @@@  @@  @@"
+	echo "@@  @ @@@  @@  @@ @@@  @@  @@  @@  @@  @@"
+	echo "@@  @@ @@     @@@@    @@@     @@@@    @@@"
+	echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
+	echo
+	echo "   Parameters:"
+	echo
+	echo "	-h: print this help doc"
+	echo
+	echo "	-t: set search tag"
+	echo
+	echo "	-l: list all domains"
+	echo
+	echo "	-s: list all domains in a single line"
+	echo
+	echo "	-a: list all instances with details"
+	echo
+	echo "	-f: specify path and filename for FTP"
+	echo
+	echo "	-d: specify destination path and filename on the instance"
+	echo
+	echo "   Examples:"
+	echo 
+	echo "	To view a list of all Production instances IDs:"
+	echo "		rdsbu -t Production -l"
+	echo 
+	echo "	To FTP a file to the Cron instances:"
+	echo "		rdsbu -f /path/to/local/file -d /path/to/destination/directory"
+	echo
+}
+
+function rdsbu() {
+	if [[ $# == "0" ]]; then
+		# listsnapshots "-l"
+		echo 
+		echo "Nothing to do"
+		echo "Type 'rdsbu -h' for help"
+		echo 
+	else
+		echo
+		switchboard $@
+	fi
+}
+
+function switchboard() {
+	while getopts ":ht:lb" optname
+	do
+		case "$optname" in
+			"h")
+				usage
+				exit
+				;;
+			"t")
+				setid $OPTARG
+				;;
+			"l" | "s" | "a")
+				if [[ -z $listparam ]]; then
+					listparam=$optname
+				fi
+				;;
+			"b")
+				backuplatest
+				exit
+				;;
+			"?")
+				echo "Unknown option $OPTARG"
+				;;
+			":")
+				case "$OPTARG" in
+					"f")
+						echo "Argument $OPTARG requires a filename"
+						exit
+						;;
+					"t")
+						echo "Argument $OPTARG requires a tag name"
+						exit
+						;;
+					*)
+						echo "Argument $OPTARG requires a value"
+						;;
+				esac
+				;;
+			*)
+				# Should not occur
+				echo "Nothing to do"
+				;;
+		esac
+		# echo "OPTIND is now $OPTIND"
+	done
+	if [[ -z $listparam ]] && [[ -z $filepath ]] && [[ -z $destination ]]; then
+		usage
+		exit 1
+	elif [[ $listparam ]]; then
+		listsnapshots
+	elif [[ $filepath ]] || [[ $destination ]]; then
+		sendftp
+	else 
+		usage
+		exit 1
+	fi
+}
+
+function backuplatest() {
+	setdefaults
+	setdata
+	echo "Backing up latest snapshot..."
+
+	while read line; ## gets each instance domain name
+	do
+		set $line ## $2 = instance tag, $4 = domain name
+		dt=${3:0:10}
+		pdt=$(date -d "$dt" "+%s")
+		ssavedt=$(date --date @$savedt +%F)
+		# echo "$dt > $ssavedt"
+		if [[ $pdt > $savedt ]]; then
+			# echo "saved $dt"
+			if [[ $4 == 'production' ]]; then
+				savedt=$pdt
+				snapshot=$2
+			fi
+		fi
+	done <<< "$snapshots"
+	echo "Spinning up snapshot ID: $snapshot"
+	rds-restore-db-instance-from-db-snapshot $backupnm -s $snapshot -c db.m1.large
+	echo
+}
+
+function listsnapshots() {
+	setdefaults
+	setdata
+	echo "Getting snapshot details..."
+	echo
+	
+	if [[ $listparam == "l" ]]; then
+		listfunctions $param
+	fi
+	echo
+}
+
+function setdefaults() {
+	echo -n "Setting defaults..."
+	snapshot=""
+	savedt=$(date -d "2009-01-01" "+%s")
+	backupnm="backup"
+	echo -e "\rDefaults set\033[K"
+}
+
+function setdata() {
+	echo -n "Setting data..."
+
+	sdata=$(rds-describe-db-snapshots)
+	# sdata=$(cat rds-describe-db-snapshots.txt) # TEST DATA - CHANGE TO PREVIOUS LINE BEFORE PUBLISHING
+	snapshots=$(echo "$sdata" | grep DBSNAPSHOT)
+
+	idata=$(rds-describe-db-instances)
+	# idata=$(cat rds-describe-db-instances.txt) # TEST DATA - CHANGE TO PREVIOUS LINE BEFORE PUBLISHING
+	instances=$(echo "$idata" | grep DBINSTANCE)
+
+	echo -e "\rData set\033[K"
+}
+
+function listfunctions() {
+	case "$listparam" in
+		"l")
+			while read line; ## gets each instance domain name
+			do
+				set $line ## $2 = instance tag, $4 = domain name
+				echo $line
+			done <<< "$snapshots"
+			;;
+		*)
+			echo
+			;;
+	esac
+	echo 
+}
+
+rdsbu $@
