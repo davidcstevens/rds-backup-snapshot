@@ -114,6 +114,19 @@ function backuplatest() {
 	setdata
 	echo "Backing up latest snapshot..."
 
+	setlatestsnapshot
+	echo "Spinning up snapshot ID: $snapshot"
+	# rds-restore-db-instance-from-db-snapshot $backupnm -s $snapshot -c db.m1.large # REMOVED FOR TESTING - REENABLE
+
+	while sleep 60
+    do
+		# mysqldump -P 3306 -h backup.coezvwdirre0.us-east-1.rds.amazonaws.com -u zanehra_zanehra -pJrWhopper99 zanehra_4 `cat tables.test.txt` > backup.sql # REMOVED FOR TESTING
+		mysqldump -P 3306 -h $backupnm.coezvwdirre0.us-east-1.rds.amazonaws.com -u zanehra_zanehra -pJrWhopper99 zanehra_4 `cat tables.test.txt` > $backupnm.test.sql # test script
+	done
+	echo
+}
+
+function setlatestsnapshot() {
 	while read line; ## gets each instance domain name
 	do
 		set $line ## $2 = instance tag, $4 = domain name
@@ -129,9 +142,6 @@ function backuplatest() {
 			fi
 		fi
 	done <<< "$snapshots"
-	echo "Spinning up snapshot ID: $snapshot"
-	rds-restore-db-instance-from-db-snapshot $backupnm -s $snapshot -c db.m1.large
-	echo
 }
 
 function listsnapshots() {
@@ -139,7 +149,7 @@ function listsnapshots() {
 	setdata
 	echo "Getting snapshot details..."
 	echo
-	
+
 	if [[ $listparam == "l" ]]; then
 		listfunctions $param
 	fi
