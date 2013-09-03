@@ -101,8 +101,6 @@ function switchboard() {
 		exit 1
 	elif [[ $listparam ]]; then
 		listsnapshots
-	elif [[ $filepath ]] || [[ $destination ]]; then
-		sendftp
 	else 
 		usage
 		exit 1
@@ -116,13 +114,23 @@ function backuplatest() {
 
 	setlatestsnapshot
 	echo "Spinning up snapshot ID: $snapshot"
-	# rds-restore-db-instance-from-db-snapshot $backupnm -s $snapshot -c db.m1.large # REMOVED FOR TESTING - REENABLE
+	rds-restore-db-instance-from-db-snapshot $backupnm -s $snapshot -c db.m1.large
+	echo "Snapshot spinning up. This could take a while..."
+	waitforrestore
+	echo "Snapshot spun up."
+	
+	echo "Dumping up database..."
+	mysqldump -P 3306 -h $backupnm.coezvwdirre0.us-east-1.rds.amazonaws.com -u zanehra_zanehra -pJrWhopper99 zanehra_4 `cat tables.txt` > $backupnm.$currentdt.sql
+	echo "Dump complete."
+	echo "Backing up database..."
+	mysqldump -u zanehra_zanehra zanehra_4 < $backupnm.$currentdt.sql
+	echo "Backup complete."
 
-	while sleep 60
-    do
-		# mysqldump -P 3306 -h backup.coezvwdirre0.us-east-1.rds.amazonaws.com -u zanehra_zanehra -pJrWhopper99 zanehra_4 `cat tables.test.txt` > backup.sql # REMOVED FOR TESTING
-		mysqldump -P 3306 -h $backupnm.coezvwdirre0.us-east-1.rds.amazonaws.com -u zanehra_zanehra -pJrWhopper99 zanehra_4 `cat tables.test.txt` > $backupnm.test.sql # test script
-	done
+	echo "Removing snapshot instance..."
+	rds-delete-db-instance $backupnm --force --skip-final-snapshot
+	## could add wait script, but why?
+	echo "Complete"
+
 	echo
 }
 
@@ -161,6 +169,7 @@ function setdefaults() {
 	snapshot=""
 	savedt=$(date -d "2009-01-01" "+%s")
 	backupnm="backup"
+	currentdt = date '+%F'
 	echo -e "\rDefaults set\033[K"
 }
 
@@ -176,6 +185,20 @@ function setdata() {
 	instances=$(echo "$idata" | grep DBINSTANCE)
 
 	echo -e "\rData set\033[K"
+}
+
+function waitforrestore() {
+	while read line; ## gets each instance domain name
+	do
+		set $line ## $2 = instance tag, $4 = domain name
+		if [[ $2 == "$backupnm" ]]; then
+			if [[ $21 != 'in-sync' ]]; then
+				sleep 30
+				setdata
+				waitforrestore
+			fi
+		fi
+	done <<< "$instances"
 }
 
 function listfunctions() {

@@ -1,4 +1,4 @@
--- MySQL dump 10.11
+-- MySQL dump 10.13  Distrib 5.1.69, for redhat-linux-gnu (x86_64)
 --
 -- Host: backup.coezvwdirre0.us-east-1.rds.amazonaws.com    Database: zanehra_4
 -- ------------------------------------------------------
@@ -126,4 +126,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2013-08-23 14:44:37
+-- Dump completed on 2013-08-28 15:06:10
