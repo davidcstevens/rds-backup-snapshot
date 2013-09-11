@@ -16,25 +16,17 @@ function usage() {
 	echo
 	echo "	-h: print this help doc"
 	echo
-	echo "	-t: set search tag"
+	echo "	-b: run backup script"
 	echo
-	echo "	-l: list all domains"
-	echo
-	echo "	-s: list all domains in a single line"
-	echo
-	echo "	-a: list all instances with details"
-	echo
-	echo "	-f: specify path and filename for FTP"
-	echo
-	echo "	-d: specify destination path and filename on the instance"
+	echo "	-d: check disk space"
 	echo
 	echo "   Examples:"
 	echo 
-	echo "	To view a list of all Production instances IDs:"
-	echo "		rdsbu -t Production -l"
+	echo "	To view this help message:"
+	echo "		rdsbu -h"
 	echo 
-	echo "	To FTP a file to the Cron instances:"
-	echo "		rdsbu -f /path/to/local/file -d /path/to/destination/directory"
+	echo "	To run backup process:"
+	echo "		rdsbu -b"
 	echo
 }
 
@@ -45,6 +37,9 @@ function rdsbu() {
 		echo "Nothing to do"
 		echo "Type 'rdsbu -h' for help"
 		echo 
+		num=13
+		# emailer -m "There was an error backing up RDS $num" -s "RDS backup error $num" -a "/var/www/html/lib-other/rds-backup-snapshot/backup.log"
+		emailer -m "There was an not error backing up RDS $num" -s "RDS backup successful $num"
 	else
 		echo
 		switchboard $@
@@ -52,7 +47,7 @@ function rdsbu() {
 }
 
 function switchboard() {
-	while getopts ":ht:lb" optname
+	while getopts ":ht:lbd" optname
 	do
 		case "$optname" in
 			"h")
@@ -69,6 +64,10 @@ function switchboard() {
 				;;
 			"b")
 				backuplatest
+				exit
+				;;
+			"d")
+				checkdiskspace -v
 				exit
 				;;
 			"?")
@@ -108,42 +107,35 @@ function switchboard() {
 }
 
 function backuplatest() {
+	checkdiskspace
+
 	setdefaults
 	setdata
-	echo "Backing up latest snapshot..."
+
+	logg "Backup initiated"
+	logg $(date +%F-%T)
 
 	setlatestsnapshot
-	echo "Spinning up snapshot ID: $snapshot"
-	rds-restore-db-instance-from-db-snapshot $backupnm -s $snapshot -c db.m1.large
-	echo "Snapshot spinning up. This could take a while..."
+	spinupsnapshot
 	waitforrestore
-	echo "Snapshot spun up."
-	
-	echo "Dumping up database..."
-	mysqldump -P 3306 -h $backupnm.coezvwdirre0.us-east-1.rds.amazonaws.com -u zanehra_zanehra -pJrWhopper99 zanehra_4 `cat tables.txt` > $backupnm.$currentdt.sql
-	echo "Dump complete."
-	echo "Backing up database..."
-	mysqldump -u zanehra_zanehra zanehra_4 < $backupnm.$currentdt.sql
-	echo "Backup complete."
+	waitfordump
+	backupdb
+	removesnapshot
+	removeOldBackups
 
-	echo "Removing snapshot instance..."
-	rds-delete-db-instance $backupnm --force --skip-final-snapshot
-	## could add wait script, but why?
-	echo "Complete"
-
-	echo
+	logg "Backup complete "$(date +%F-%T)
+	logg
 }
 
 function setlatestsnapshot() {
+	logg "Setting up latest snapshot..."
 	while read line; ## gets each instance domain name
 	do
 		set $line ## $2 = instance tag, $4 = domain name
 		dt=${3:0:10}
 		pdt=$(date -d "$dt" "+%s")
 		ssavedt=$(date --date @$savedt +%F)
-		# echo "$dt > $ssavedt"
 		if [[ $pdt > $savedt ]]; then
-			# echo "saved $dt"
 			if [[ $4 == 'production' ]]; then
 				savedt=$pdt
 				snapshot=$2
@@ -152,29 +144,80 @@ function setlatestsnapshot() {
 	done <<< "$snapshots"
 }
 
+function spinupsnapshot() {
+	logg "Spinning up snapshot ID: $snapshot..."
+	rds-restore-db-instance-from-db-snapshot $backupnm -s $snapshot -c db.m1.large
+	sleep 10
+}
+
+function waitforrestore() {
+	setdata
+	while read line; ## gets each instance domain name
+	do
+		set $line ## $2 = instance tag
+		if [[ "$2" == "$backupnm" ]]; then
+			if [[ "$8" != 'available' ]]; then ## $8 = available, creating, deleting, backing-up, modifying
+				#echo "waiting..."
+				sleep 30
+				waitforrestore
+			fi
+		fi
+	done <<< "$instances"
+	logg "Snapshot spun up."
+}
+
+function waitfordump() {
+	logg "Dumping database...."
+	while dumpdb == false
+	do
+		sleep 10
+	done
+	logg "Dump complete."
+}
+
+function dumpdb() {
+	dump=$(mysqldump -P 3306 -h $backupnm.coezvwdirre0.us-east-1.rds.amazonaws.com -u zanehra_zanehra -pJrWhopper99 zanehra_4 `cat tables.txt` > $backupnm.$currentdt.sql)
+	if echo "$dump" | grep "^Got error.*"
+	then
+		return 0
+	else
+		return 1
+	fi
+}
+
+function backupdb() {
+	logg "Backing up database..."
+	mysql -u zanehra_zanehra -pJrWhopper99 zanehra_4 < $backupnm.$currentdt.sql
+	logg "Backup complete."
+}
+
+function removesnapshot() {
+	logg "Removing snapshot instance..."
+	rds-delete-db-instance $backupnm --force --skip-final-snapshot
+	logg "Snapshot instance removed."
+}
+
 function listsnapshots() {
 	setdefaults
 	setdata
-	echo "Getting snapshot details..."
-	echo
+	logg "Getting snapshot details..."
 
 	if [[ $listparam == "l" ]]; then
 		listfunctions $param
 	fi
-	echo
 }
 
 function setdefaults() {
-	echo -n "Setting defaults..."
+	#echo -n "Setting defaults..."
 	snapshot=""
 	savedt=$(date -d "2009-01-01" "+%s")
 	backupnm="backup"
-	currentdt = date '+%F'
-	echo -e "\rDefaults set\033[K"
+	currentdt=$(date '+%F')
+	#echo -e "\rDefaults set\033[K"
 }
 
 function setdata() {
-	echo -n "Setting data..."
+	#echo -n "Setting data..."
 
 	sdata=$(rds-describe-db-snapshots)
 	# sdata=$(cat rds-describe-db-snapshots.txt) # TEST DATA - CHANGE TO PREVIOUS LINE BEFORE PUBLISHING
@@ -184,21 +227,7 @@ function setdata() {
 	# idata=$(cat rds-describe-db-instances.txt) # TEST DATA - CHANGE TO PREVIOUS LINE BEFORE PUBLISHING
 	instances=$(echo "$idata" | grep DBINSTANCE)
 
-	echo -e "\rData set\033[K"
-}
-
-function waitforrestore() {
-	while read line; ## gets each instance domain name
-	do
-		set $line ## $2 = instance tag, $4 = domain name
-		if [[ $2 == "$backupnm" ]]; then
-			if [[ $21 != 'in-sync' ]]; then
-				sleep 30
-				setdata
-				waitforrestore
-			fi
-		fi
-	done <<< "$instances"
+	#echo -e "\rData set\033[K"
 }
 
 function listfunctions() {
@@ -215,6 +244,104 @@ function listfunctions() {
 			;;
 	esac
 	echo 
+}
+
+function logg() {
+	if [ ! -f ./backup.log ]; then
+	    touch ./backup.log
+	fi
+	echo "$(date +%F-%T)  $1" >> ./backup.log
+}
+
+function emailer() {
+	## EXAMPLES
+	#	emailer "test subject" "test message"
+	#	emailer -m "test message" -s "test subject" -a ~/attachment.txt
+		
+	to="david.stevens@zanebenefits.com"
+
+	if [[ $# == 0 ]]; then
+		echo "sendmail() requires at least one argument (default: message text)"
+		exit
+	elif [[ $# == 2 ]]; then
+		subject="$1"
+		message="$2"
+	else
+		subject="RDS backup server message"
+		message="$1"
+		while getopts ":m:s:a:" optname
+		do
+			case $optname in
+				"m")
+					message="$OPTARG"
+					;;
+				"s")
+					subject="$OPTARG"
+					;;
+				"a")
+					attachment="$OPTARG"
+					;;
+				"?")
+					echo "Unknown option $OPTARG"
+					;;
+				":")
+					echo "Argument $OPTARG requires an argument"
+					;;
+				*)
+					# Should not occur
+					echo "Nothing to do. Emailer() requires argument values."
+					;;
+			esac
+		done
+	fi
+	if [ -n $attachment ]; then
+		echo "$message" | mail -s "$subject" -a "$attachment" "$to"
+	else 
+		echo "$message" | mail -s "$subject" "$to"
+	fi
+}
+
+function checkdiskspace() {
+	## minimun disk space in GB
+	min=15
+
+	if [ -n "$1" ]; then
+		verbose=true
+	fi
+
+	while read line;
+	do
+		set $line
+		if [[ "$5" == "/" ]]; then
+			test="14G"
+			space=${3%.*}
+			space=${space%[A-Z]*}
+		fi
+	done < <(df -h ~)
+	if [ -n "$verbose" ]; then
+		echo "$space GB disk space available"
+	elif [[ $space -lt $min ]]; then
+		logg "Low disk space: $space GB available"
+		emailer "Backup of RDS failed - low disk space" "$(printf '%s\n' "These is only around $space GB available to create backups." "The system requires a minimum of $min GB.")"
+		exit
+	fi
+}
+
+function removeOldBackups() {
+	## age (in days) to delete if older
+	days=2
+
+	today=$(date +%s)
+	((cutoff = $today - (86400 * $days) )) ## 86400 = 1 day
+	find . -maxdepth 1 -regex '^\./backup.*sql' | while read fileName  #Or however you get all the file names
+	do
+		fileDate=$(echo $fileName | sed 's/.*\([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\).*/\1/')
+		fileDateInSeconds=$(date +"%s" --date="$fileDate")
+		if [[ $fileDateInSeconds -lt $cutoff ]]
+		then
+			echo $fileName
+		fi
+	done
 }
 
 rdsbu $@
