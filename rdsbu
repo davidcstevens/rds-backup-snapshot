@@ -37,9 +37,6 @@ function rdsbu() {
 		echo "Nothing to do"
 		echo "Type 'rdsbu -h' for help"
 		echo 
-		num=13
-		# emailer -m "There was an error backing up RDS $num" -s "RDS backup error $num" -a "/var/www/html/lib-other/rds-backup-snapshot/backup.log"
-		emailer -m "There was an not error backing up RDS $num" -s "RDS backup successful $num"
 	else
 		echo
 		switchboard $@
@@ -294,7 +291,7 @@ function emailer() {
 			esac
 		done
 	fi
-	if [ -n $attachment ]; then
+	if [ -n "$attachment" ]; then
 		echo "$message" | mail -s "$subject" -a "$attachment" "$to"
 	else 
 		echo "$message" | mail -s "$subject" "$to"
@@ -313,16 +310,20 @@ function checkdiskspace() {
 	do
 		set $line
 		if [[ "$5" == "/" ]]; then
-			test="14G"
 			space=${3%.*}
+			space=${space%[A-Z]*}
+		elif [[ "$6" == "/" ]]; then
+			space=${4%.*}
 			space=${space%[A-Z]*}
 		fi
 	done < <(df -h ~)
 	if [ -n "$verbose" ]; then
 		echo "$space GB disk space available"
 	elif [[ $space -lt $min ]]; then
+		echo "$space"
 		logg "Low disk space: $space GB available"
-		emailer "Backup of RDS failed - low disk space" "$(printf '%s\n' "These is only around $space GB available to create backups." "The system requires a minimum of $min GB.")"
+		# emailer "Backup of RDS failed - low disk space" "$(printf '%s\n' "These is only around $space GB available to create backups." "The system requires a minimum of $min GB.")"
+		emailer "Backup of RDS failed - low disk space" "These is only around $space GB available to create backups. The system requires a minimum of $min GB."
 		exit
 	fi
 }
