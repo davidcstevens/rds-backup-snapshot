@@ -117,7 +117,7 @@ function backuplatest() {
 	waitforrestore
 	waitfordump
 	backupdb
-	removesnapshot
+	# removesnapshot
 	removeOldBackups
 
 	logg "Backup complete "$(date +%F-%T)
