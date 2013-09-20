@@ -38,7 +38,6 @@ function rdsbu() {
 		echo "Type 'rdsbu -h' for help"
 		echo 
 	else
-		echo
 		switchboard $@
 	fi
 }
@@ -117,11 +116,12 @@ function backuplatest() {
 	waitforrestore
 	waitfordump
 	backupdb
-	# removesnapshot
+	removesnapshot
 	removeOldBackups
 
 	logg "Backup complete "$(date +%F-%T)
-	logg
+	emailer -s "RDS backup successful $currentdt" -m "Backup of RDS successful $currentdt" -a ./backup.log
+	logg -c
 }
 
 function setlatestsnapshot() {
@@ -176,6 +176,7 @@ function dumpdb() {
 	dump=$(mysqldump -P 3306 -h $backupnm.coezvwdirre0.us-east-1.rds.amazonaws.com -u zanehra_zanehra -pJrWhopper99 zanehra_4 `cat tables.txt` > $backupnm.$currentdt.sql)
 	if echo "$dump" | grep "^Got error.*"
 	then
+		emailer "Dump of RDS backup failed" "MySQL error message: $dump"
 		return 0
 	else
 		return 1
@@ -244,10 +245,20 @@ function listfunctions() {
 }
 
 function logg() {
+	# clear log with 'logg -c'
 	if [ ! -f ./backup.log ]; then
 	    touch ./backup.log
 	fi
-	echo "$(date +%F-%T)  $1" >> ./backup.log
+	if [[ $1 == "-c" ]]; then
+		day=$(date +%F)
+		time=$(date +%H-%M-%S)
+		mv ./backup.log "./backup.$day.$time.log"		
+	    touch ./backup.log
+	elif [ -z $1 ]; then
+		echo >> ./backup.log
+	else 
+		echo "$(date +%F-%T)  $1" >> ./backup.log
+	fi
 }
 
 function emailer() {
@@ -265,30 +276,30 @@ function emailer() {
 		message="$2"
 	else
 		subject="RDS backup server message"
-		message="$1"
-		while getopts ":m:s:a:" optname
-		do
-			case $optname in
-				"m")
-					message="$OPTARG"
+		while true; do
+		    case $1 in
+				-m)
+					shift
+					message="$1"
+					shift
 					;;
-				"s")
-					subject="$OPTARG"
+				-s)
+					shift
+					subject="$1"
+					shift
 					;;
-				"a")
-					attachment="$OPTARG"
+				-a)
+					shift
+					attachment="$1"
+					shift
 					;;
-				"?")
-					echo "Unknown option $OPTARG"
+				-*) 
+					echo "$0: Unrecognized option $1" >&2
+					exit 2
 					;;
-				":")
-					echo "Argument $OPTARG requires an argument"
-					;;
-				*)
-					# Should not occur
-					echo "Nothing to do. Emailer() requires argument values."
-					;;
-			esac
+				*) 
+					break ;;
+		    esac
 		done
 	fi
 	if [ -n "$attachment" ]; then
@@ -340,7 +351,7 @@ function removeOldBackups() {
 		fileDateInSeconds=$(date +"%s" --date="$fileDate")
 		if [[ $fileDateInSeconds -lt $cutoff ]]
 		then
-			echo $fileName
+			rm "$fileName"
 		fi
 	done
 }
