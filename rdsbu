@@ -20,6 +20,8 @@ function usage() {
 	echo
 	echo "	-d: check disk space"
 	echo
+	echo "	-r: remove old backups"
+	echo
 	echo "   Examples:"
 	echo 
 	echo "	To view this help message:"
@@ -64,6 +66,10 @@ function switchboard() {
 				;;
 			"d")
 				checkdiskspace -v
+				exit
+				;;
+			"r")
+				removeOldBackups
 				exit
 				;;
 			"?")
