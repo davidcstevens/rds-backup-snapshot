@@ -65,10 +65,12 @@ function switchboard() {
 				exit
 				;;
 			"d")
+				setdefaults
 				checkdiskspace -v
 				exit
 				;;
 			"r")
+				setdefaults
 				removeOldBackups
 				exit
 				;;
@@ -214,9 +216,12 @@ function listsnapshots() {
 function setdefaults() {
 	#echo -n "Setting defaults..."
 	snapshot=""
+	today=$(date +%s)
 	savedt=$(date -d "2009-01-01" "+%s")
-	backupnm="backup"
 	currentdt=$(date '+%F')
+	backupnm="backup"
+	mindiskspace=15
+	removeoldbackupsdays=2
 	#echo -e "\rDefaults set\033[K"
 }
 
@@ -252,6 +257,7 @@ function listfunctions() {
 
 function logg() {
 	# clear log with 'logg -c'
+	
 	if [ ! -f ./backup.log ]; then
 	    touch ./backup.log
 	fi
@@ -260,7 +266,7 @@ function logg() {
 		time=$(date +%H-%M-%S)
 		mv ./backup.log "./backup.$day.$time.log"		
 	    touch ./backup.log
-	elif [ -z $1 ]; then
+	elif [[ -z "$1" ]]; then
 		echo >> ./backup.log
 	else 
 		echo "$(date +%F-%T)  $1" >> ./backup.log
@@ -268,7 +274,8 @@ function logg() {
 }
 
 function emailer() {
-	## EXAMPLES
+
+	#	EXAMPLES
 	#	emailer "test subject" "test message"
 	#	emailer -m "test message" -s "test subject" -a ~/attachment.txt
 		
@@ -316,10 +323,7 @@ function emailer() {
 }
 
 function checkdiskspace() {
-	## minimun disk space in GB
-	min=15
-
-	if [ -n "$1" ]; then
+	if [[ $1 == "-v" ]]; then
 		verbose=true
 	fi
 
@@ -335,22 +339,18 @@ function checkdiskspace() {
 		fi
 	done < <(df -h ~)
 	if [ -n "$verbose" ]; then
-		echo "$space GB disk space available"
-	elif [[ $space -lt $min ]]; then
-		echo "$space"
-		logg "Low disk space: $space GB available"
-		# emailer "Backup of RDS failed - low disk space" "$(printf '%s\n' "These is only around $space GB available to create backups." "The system requires a minimum of $min GB.")"
-		emailer "Backup of RDS failed - low disk space" "These is only around $space GB available to create backups. The system requires a minimum of $min GB."
+		echo "$space GB disk space available. Minimum disk space required is $mindiskspace GB"
+	elif [[ $space -lt $mindiskspace ]]; then
+		echo "Low disk space: $space GB available.  The system requires a minimum of $mindiskspace GB. Consider running 'rdsbu -r' to remove old backup files."
+		logg "Low disk space: $space GB available. Backup failed :("
+		# emailer "Backup of RDS failed - low disk space" "$(printf '%s\n' "These is only around $space GB available to create backups." "The system requires a minimum of $mindiskspace GB.")"
+		emailer "Backup of RDS failed - low disk space" "These is only around $space GB available to create backups. The system requires a minimum of $mindiskspace GB. Consider running 'rdsbu -r' to remove old backup files."
 		exit
 	fi
 }
 
 function removeOldBackups() {
-	## age (in days) to delete if older
-	days=2
-
-	today=$(date +%s)
-	((cutoff = $today - (86400 * $days) )) ## 86400 = 1 day
+	((cutoff = $today - (86400 * $removeoldbackupsdays) )) ## 86400 = 1 day
 	find . -maxdepth 1 -regex '^\./backup.*sql' | while read fileName  #Or however you get all the file names
 	do
 		fileDate=$(echo $fileName | sed 's/.*\([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\).*/\1/')
