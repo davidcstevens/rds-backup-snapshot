@@ -122,6 +122,7 @@ function backuplatest() {
 	setlatestsnapshot
 	spinupsnapshot
 	waitforrestore
+	logg "Snapshot spun up."
 	waitfordump
 	backupdb
 	removesnapshot
@@ -168,7 +169,6 @@ function waitforrestore() {
 			fi
 		fi
 	done <<< "$instances"
-	logg "Snapshot spun up."
 }
 
 function waitfordump() {
