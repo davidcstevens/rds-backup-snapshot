@@ -22,6 +22,8 @@ function usage() {
 	echo
 	echo "	-r: remove old backups"
 	echo
+	echo "	-g: clear log"
+	echo
 	echo "   Examples:"
 	echo 
 	echo "	To view this help message:"
@@ -45,7 +47,7 @@ function rdsbu() {
 }
 
 function switchboard() {
-	while getopts ":ht:lbdr" optname
+	while getopts ":ht:lbdrg" optname
 	do
 		case "$optname" in
 			"h")
@@ -72,6 +74,10 @@ function switchboard() {
 			"r")
 				setdefaults
 				removeOldBackups
+				exit
+				;;
+			"g")
+				logg -c
 				exit
 				;;
 			"?")
