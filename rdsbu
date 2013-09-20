@@ -45,7 +45,7 @@ function rdsbu() {
 }
 
 function switchboard() {
-	while getopts ":ht:lbd" optname
+	while getopts ":ht:lbdr" optname
 	do
 		case "$optname" in
 			"h")
